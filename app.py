@@ -1,5 +1,5 @@
 import sys
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
     QWidget,
@@ -17,8 +17,6 @@ from PySide6.QtSql import QSqlDatabase, QSqlQueryModel
 
 
 class DBApp(QWidget):
-    switchPages = Signal(str, str)
-
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("PostgreSQL Interface")
@@ -78,7 +76,7 @@ class DBApp(QWidget):
         )
 
         login_button.clicked.connect(
-            lambda: self.switchPages.emit(username_line.text(), password_line.text())
+            lambda: self.switch_pages(username_line.text(), password_line.text())
         )
 
     def check_forms(
@@ -93,17 +91,12 @@ class DBApp(QWidget):
             login_button.setEnabled(False)
 
     def switch_pages(self, db_username: str, db_password: str):
-        self.stacked_layout.setCurrentIndex(1)
-        self.db_display(db_username, db_password)
+        db = QSqlDatabase()
+        if self.connect_db(db, db_username, db_password):
+            self.db_display(db)
+            self.stacked_layout.setCurrentIndex(1)
 
-    def db_display(self, db_username: str, db_password: str) -> None:
-        db_page = QWidget()
-        layout = QGridLayout()
-
-        layout.addWidget(QLabel("Transactions"), 0, 0)
-        layout.addWidget(QLabel("Search:"), 1, 0)
-        layout.addWidget(QLineEdit(), 2, 0, 1, 3)
-
+    def connect_db(self, db: QSqlDatabase, db_username: str, db_password: str):
         db = QSqlDatabase.addDatabase("QPSQL")
         db.setDatabaseName("postgres")
         db.setUserName(db_username)
@@ -113,7 +106,17 @@ class DBApp(QWidget):
 
         if not db.open():
             print("Failed to connect to database.")
-            return
+            return 0
+        else:
+            return 1
+
+    def db_display(self, db: QSqlDatabase) -> None:
+        db_page = QWidget()
+        layout = QGridLayout()
+
+        layout.addWidget(QLabel("Transactions"), 0, 0)
+        layout.addWidget(QLabel("Search:"), 1, 0)
+        layout.addWidget(QLineEdit(), 2, 0, 1, 3)
 
         table = QTableView()
 
@@ -149,5 +152,4 @@ if __name__ == "__main__":
     #     _style = f.read()
     #     app.setStyleSheet(_style)
     window = DBApp()
-    window.switchPages.connect(window.switch_pages)
     app.exec()
