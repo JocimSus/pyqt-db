@@ -107,6 +107,7 @@ class DBApp(QWidget):
         layout = QGridLayout()
         sql_query = QLineEdit()
         sql_query_button = QPushButton("Run Query")
+        sql_query_button.setAutoDefault(True)
 
         layout.addWidget(QLabel("Database View"), 0, 0)
         layout.addWidget(QLabel("Run SQL Queries:"), 1, 0)
@@ -126,13 +127,7 @@ class DBApp(QWidget):
 
         sql_query_button.clicked.connect(lambda: self.run_query(sql_query, query_model))
 
-        if query_model.lastError().isValid():
-            QMessageBox.critical(
-                None, "Query Error", f"Query Error: {query_model.lastError().text()}"
-            )
-
         table.setModel(query_model)
-        table.resizeColumnsToContents()
         layout.addWidget(table, 4, 0, 1, 3)
 
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -147,6 +142,10 @@ class DBApp(QWidget):
             """,
             self.db,
         )
+        if query_model.lastError().isValid():
+            QMessageBox.critical(
+                None, "Query Error", f"Query Error: {query_model.lastError().text()}"
+            )
 
 
 if __name__ == "__main__":
