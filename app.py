@@ -1,4 +1,4 @@
-import sys
+import sys, os.path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
@@ -7,10 +7,10 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QVBoxLayout,
     QHBoxLayout,
-    QFormLayout,
     QLabel,
     QPushButton,
     QLineEdit,
+    QMessageBox,
     QTableView,
 )
 from PySide6.QtSql import QSqlDatabase, QSqlQueryModel
@@ -19,7 +19,7 @@ from PySide6.QtSql import QSqlDatabase, QSqlQueryModel
 class DBApp(QWidget):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("PostgreSQL Interface")
+        self.setWindowTitle("SQL Interface")
         self.resize(800, 600)
 
         layout = QVBoxLayout()
@@ -31,12 +31,12 @@ class DBApp(QWidget):
         self.login_screen()
         self.show()
 
-    def login_screen(self):
+    def login_screen(self) -> None:
         login_page = QWidget()
         layout = QVBoxLayout()
         h_title_layout = QHBoxLayout()
         h_form_layout = QHBoxLayout()
-        form_layout = QFormLayout()
+        form_layout = QVBoxLayout()
 
         # Top Down Center
         layout.addStretch()
@@ -48,108 +48,108 @@ class DBApp(QWidget):
         h_title_layout.addStretch()
         h_title_layout.addWidget(QLabel("Login Page"))
         h_title_layout.addStretch()
-        h_title_layout.setContentsMargins(0, 0, 0, 50)
+        h_title_layout.setContentsMargins(0, 0, 0, 25)
 
         # Forms Center
         h_form_layout.addStretch()
         h_form_layout.addLayout(form_layout)
         h_form_layout.addStretch()
 
-        username_line = QLineEdit()
-        password_line = QLineEdit()
+        db_name = QLineEdit()
         login_button = QPushButton("Login")
+        login_button.setAutoDefault(True)
         login_button.setEnabled(False)
 
-        form_layout.addRow("DB Username:", username_line)
-        form_layout.addRow("DB Password:", password_line)
+        form_layout.addWidget(QLabel("DB Name (SQLite):"))
+        form_layout.addWidget(db_name)
         form_layout.addWidget(login_button)
 
         login_page.setLayout(layout)
         self.stacked_layout.addWidget(login_page)
 
         # Enable button once forms filled
-        username_line.textChanged.connect(
-            lambda: self.check_forms(username_line, password_line, login_button)
-        )
-        password_line.textChanged.connect(
-            lambda: self.check_forms(username_line, password_line, login_button)
-        )
+        db_name.textChanged.connect(lambda: self.check_forms(db_name, login_button))
 
-        login_button.clicked.connect(
-            lambda: self.switch_pages(username_line.text(), password_line.text())
-        )
+        login_button.clicked.connect(lambda: self.switch_pages(db_name.text()))
 
-    def check_forms(
-        self,
-        username_line: QLineEdit,
-        password_line: QLineEdit,
-        login_button: QPushButton,
-    ) -> None:
-        if len(username_line.text()) > 0 and len(password_line.text()) > 0:
+    def check_forms(self, db_name: QLineEdit, login_button: QPushButton) -> None:
+        if len(db_name.text()) > 0:
             login_button.setEnabled(True)
         else:
             login_button.setEnabled(False)
 
-    def switch_pages(self, db_username: str, db_password: str):
-        db = QSqlDatabase()
-        if self.connect_db(db, db_username, db_password):
-            self.db_display(db)
+    def switch_pages(self, db_name: str) -> None:
+        if self.connect_db(db_name):
+            self.db_display()
             self.stacked_layout.setCurrentIndex(1)
 
-    def connect_db(self, db: QSqlDatabase, db_username: str, db_password: str):
-        db = QSqlDatabase.addDatabase("QPSQL")
-        db.setDatabaseName("postgres")
-        db.setUserName(db_username)
-        db.setPassword(db_password)
-        db.setHostName("localhost")
-        db.setPort(5432)
+    def connect_db(self, db_name: str) -> bool:
+        self.db = QSqlDatabase.addDatabase("QSQLITE")
 
-        if not db.open():
-            print("Failed to connect to database.")
-            return 0
+        if os.path.exists(f"{db_name}.db"):
+            self.db.setDatabaseName(f"{db_name}.db")
+            if not self.db.open():
+                QMessageBox.critical(
+                    None,
+                    "Database Error",
+                    f"Database Error: {self.db.lastError().databaseText()}",
+                )
+                return False
+            return True
         else:
-            return 1
+            QMessageBox.warning(
+                None, "Database Name Error", f"No Database with name {db_name}.db"
+            )
+            return False
 
-    def db_display(self, db: QSqlDatabase) -> None:
+    def db_display(self) -> None:
         db_page = QWidget()
         layout = QGridLayout()
+        sql_query = QLineEdit()
+        sql_query_button = QPushButton("Run Query")
 
-        layout.addWidget(QLabel("Transactions"), 0, 0)
-        layout.addWidget(QLabel("Search:"), 1, 0)
-        layout.addWidget(QLineEdit(), 2, 0, 1, 3)
+        layout.addWidget(QLabel("Database View"), 0, 0)
+        layout.addWidget(QLabel("Run SQL Queries:"), 1, 0)
+        layout.addWidget(sql_query, 2, 0, 1, 3)
+        layout.addWidget(sql_query_button, 3, 2, 1, 1)
 
         table = QTableView()
 
         # default query
-        query = QSqlQueryModel()
-        query.setQuery(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(40) NOT NULL,
-                age INTEGER NOT NULL
-            );
-            """,
-            db,
-        )
-        query.setQuery(
+        query_model = QSqlQueryModel()
+        query_model.setQuery(
             """
             SELECT * FROM users;
             """,
-            db,
+            self.db,
         )
-        table.setModel(query)
-        layout.addWidget(table, 3, 0, 1, 3)
+
+        sql_query_button.clicked.connect(lambda: self.run_query(sql_query, query_model))
+
+        if query_model.lastError().isValid():
+            QMessageBox.critical(
+                None, "Query Error", f"Query Error: {query_model.lastError().text()}"
+            )
+
+        table.setModel(query_model)
+        table.resizeColumnsToContents()
+        layout.addWidget(table, 4, 0, 1, 3)
 
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         db_page.setLayout(layout)
         self.stacked_layout.addWidget(db_page)
 
+    def run_query(self, sql_query: QLineEdit, query_model: QSqlQueryModel) -> None:
+        query_text = sql_query.text()
+        query_model.setQuery(
+            f"""
+            {query_text}
+            """,
+            self.db,
+        )
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    # with open("styles.qss", "r") as f:
-    #     _style = f.read()
-    #     app.setStyleSheet(_style)
     window = DBApp()
     app.exec()
